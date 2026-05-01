@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  rag-api:
+    build: .
+    container_name: rag-gdrive
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist FAISS index and uploaded files between restarts
+      - ./data:/app/data
+      # Mount credentials (never bake secrets into the image)
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
