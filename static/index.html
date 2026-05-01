@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG · Google Drive Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 { font-size: 1.8rem; font-weight: 700; }
+    header p  { color: #6e6e73; margin-top: 0.4rem; font-size: 0.95rem; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 1.25rem;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: #1d1d1f; }
+
+    /* Ask */
+    .ask-row {
+      display: flex;
+      gap: 0.6rem;
+    }
+    #query {
+      flex: 1;
+      padding: 0.65rem 1rem;
+      border: 1.5px solid #d2d2d7;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #query:focus { border-color: #0071e3; }
+
+    button {
+      padding: 0.65rem 1.2rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: #0071e3; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #0077ed; }
+    .btn-secondary { background: #e8e8ed; color: #1d1d1f; }
+    .btn-secondary:hover:not(:disabled) { background: #dcdce0; }
+
+    /* Answer */
+    #answer-box {
+      margin-top: 1.1rem;
+      display: none;
+    }
+    #answer-text {
+      background: #f5f5f7;
+      border-radius: 10px;
+      padding: 1rem;
+      font-size: 0.93rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+    #sources {
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #6e6e73;
+    }
+    #sources span {
+      display: inline-block;
+      background: #e8e8ed;
+      border-radius: 6px;
+      padding: 2px 8px;
+      margin: 2px 3px 2px 0;
+    }
+
+    /* Upload */
+    .upload-row {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #file-input { display: none; }
+    #file-label {
+      flex: 1;
+      min-width: 0;
+      padding: 0.65rem 1rem;
+      border: 1.5px dashed #d2d2d7;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      color: #6e6e73;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: border-color 0.2s;
+    }
+    #file-label:hover { border-color: #0071e3; color: #0071e3; }
+
+    /* Status bar */
+    .status-bar {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      color: #6e6e73;
+    }
+    .status-bar strong { color: #1d1d1f; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1d1d1f;
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 20px;
+      font-size: 0.88rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RAG · Google Drive Assistant</h1>
+  <p>Ask questions about your indexed documents</p>
+</header>
+
+<!-- Status -->
+<div class="card" id="status-card">
+  <h2>Index Status</h2>
+  <div class="status-bar" id="status-bar">Loading…</div>
+</div>
+
+<!-- Ask -->
+<div class="card">
+  <h2>Ask a Question</h2>
+  <div class="ask-row">
+    <input id="query" type="text" placeholder="e.g. What are the main findings?" />
+    <button class="btn-primary" id="ask-btn" onclick="askQuestion()">Ask</button>
+  </div>
+  <div id="answer-box">
+    <div id="answer-text"></div>
+    <div id="sources"></div>
+  </div>
+</div>
+
+<!-- Upload -->
+<div class="card">
+  <h2>Upload &amp; Index a Document</h2>
+  <div class="upload-row">
+    <label id="file-label" for="file-input">Choose a PDF, DOCX, or TXT file…</label>
+    <input id="file-input" type="file" accept=".pdf,.docx,.txt" onchange="fileChosen(this)" />
+    <button class="btn-primary" id="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+  </div>
+</div>
+
+<!-- Sync Drive -->
+<div class="card">
+  <h2>Sync Google Drive</h2>
+  <p style="font-size:.88rem;color:#6e6e73;margin-bottom:.9rem">
+    Requires Google credentials configured on the server.
+  </p>
+  <div style="display:flex;gap:.6rem">
+    <input id="folder-id" type="text" placeholder="Folder ID (optional)"
+      style="flex:1;padding:.65rem 1rem;border:1.5px solid #d2d2d7;border-radius:10px;font-size:.9rem;outline:none" />
+    <button class="btn-secondary" id="sync-btn" onclick="syncDrive()">Sync Drive</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const BASE = '';
+
+  async function loadStatus() {
+    try {
+      const r = await fetch(`${BASE}/status`);
+      const d = await r.json();
+      document.getElementById('status-bar').innerHTML =
+        `<span>Vectors: <strong>${d.total_vectors ?? 0}</strong></span>` +
+        `<span>Documents: <strong>${d.total_documents ?? 0}</strong></span>` +
+        (d.index_size_mb != null ? `<span>Index: <strong>${d.index_size_mb} MB</strong></span>` : '');
+    } catch {
+      document.getElementById('status-bar').textContent = 'Could not load status.';
+    }
+  }
+
+  async function askQuestion() {
+    const q = document.getElementById('query').value.trim();
+    if (!q) return;
+    const btn = document.getElementById('ask-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Thinking…';
+    const box = document.getElementById('answer-box');
+    box.style.display = 'none';
+
+    try {
+      const r = await fetch(`${BASE}/ask`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({query: q})
+      });
+      const d = await r.json();
+      document.getElementById('answer-text').textContent = d.answer ?? d.detail ?? 'No answer returned.';
+      const src = document.getElementById('sources');
+      if (d.sources && d.sources.length) {
+        src.innerHTML = 'Sources: ' + d.sources.map(s => `<span>${s}</span>`).join('');
+      } else {
+        src.innerHTML = '';
+      }
+      box.style.display = 'block';
+    } catch (e) {
+      toast('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Ask';
+    }
+  }
+
+  document.getElementById('query').addEventListener('keydown', e => {
+    if (e.key === 'Enter') askQuestion();
+  });
+
+  function fileChosen(input) {
+    const label = document.getElementById('file-label');
+    const btn = document.getElementById('upload-btn');
+    if (input.files.length) {
+      label.textContent = input.files[0].name;
+      btn.disabled = false;
+    }
+  }
+
+  async function uploadFile() {
+    const input = document.getElementById('file-input');
+    if (!input.files.length) return;
+    const btn = document.getElementById('upload-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Uploading…';
+
+    const form = new FormData();
+    form.append('file', input.files[0]);
+
+    try {
+      const r = await fetch(`${BASE}/upload-and-index`, {method: 'POST', body: form});
+      const d = await r.json();
+      if (r.ok) {
+        toast(`Indexed "${d.file_name}" — ${d.chunks_added} chunks added`);
+        input.value = '';
+        document.getElementById('file-label').textContent = 'Choose a PDF, DOCX, or TXT file…';
+        loadStatus();
+      } else {
+        toast('Upload failed: ' + (d.detail ?? r.status));
+      }
+    } catch (e) {
+      toast('Error: ' + e.message);
+    } finally {
+      btn.disabled = true;
+      btn.textContent = 'Upload';
+    }
+  }
+
+  async function syncDrive() {
+    const btn = document.getElementById('sync-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Syncing…';
+
+    const folderId = document.getElementById('folder-id').value.trim();
+    try {
+      const r = await fetch(`${BASE}/sync-drive`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(folderId ? {folder_id: folderId} : {})
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast(`Synced ${d.files_synced} file(s) — ${d.chunks_added} chunks added`);
+        loadStatus();
+      } else {
+        toast('Sync failed: ' + (d.detail ?? r.status));
+      }
+    } catch (e) {
+      toast('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sync Drive';
+    }
+  }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
+  loadStatus();
+</script>
+</body>
+</html>
