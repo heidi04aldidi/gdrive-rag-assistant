@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Secrets — never commit these
+.env
+credentials.json
+token.json
+*.pickle
+
+# Data (large files)
+data/uploads/
+data/faiss_index/
+
+# IDE
+.vscode/
+.idea/
+*.swp
