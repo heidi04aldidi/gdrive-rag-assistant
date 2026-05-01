@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 import config
@@ -101,6 +102,11 @@ def _file_doc_id(file_path: str) -> str:
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
+
+@router.get("/")
+async def root():
+    return RedirectResponse(url="/docs")
+
 
 @router.get("/health")
 async def health():
